@@ -149,6 +149,7 @@ telegram_app.add_handler(conv_handler)
 # === Webhook route ===
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
+    ensure_telegram_app_initialized()
     import asyncio
     update = Update.de_json(request.get_json(force=True), telegram_app.bot)
     
@@ -165,6 +166,7 @@ def webhook():
 # Handle webhook at root path as well (in case webhook URL is set incorrectly)
 @app.route("/", methods=["POST"])
 def webhook_root():
+    ensure_telegram_app_initialized()
     import asyncio
     update = Update.de_json(request.get_json(force=True), telegram_app.bot)
     
@@ -185,6 +187,7 @@ def index():
 @app.route("/setwebhook")
 def set_webhook():
     """Helper endpoint to set webhook URL"""
+    ensure_telegram_app_initialized()
     import asyncio
     webhook_url = request.args.get('url')
     if not webhook_url:
@@ -205,6 +208,7 @@ def set_webhook():
 @app.route("/getwebhookinfo")
 def get_webhook_info():
     """Helper endpoint to check current webhook status"""
+    ensure_telegram_app_initialized()
     import asyncio
     try:
         loop = asyncio.get_event_loop()
@@ -225,6 +229,32 @@ def get_webhook_info():
         }, 200
     except Exception as e:
         return f"Error getting webhook info: {e}", 500
+
+# === Initialize the telegram application ===
+async def init_telegram_app():
+    """Initialize the telegram application"""
+    try:
+        await telegram_app.initialize()
+        print("Telegram application initialized successfully")
+    except Exception as e:
+        print(f"Error initializing telegram app: {e}")
+
+# Global variable to track initialization
+app_initialized = False
+
+def ensure_telegram_app_initialized():
+    """Ensure telegram app is initialized before processing updates"""
+    global app_initialized
+    if not app_initialized:
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        loop.run_until_complete(init_telegram_app())
+        app_initialized = True
 
 # === Run the app ===
 if __name__ == "__main__":
