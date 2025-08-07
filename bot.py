@@ -13,11 +13,9 @@ from telegram.ext import (
 from sheet import (
     is_slot_available,
     save_booking,
-    get_alternative_times,
     is_valid_date,
     is_weekend,
-    get_available_slots,
-    sheet
+    get_available_slots
 )
 
 # Load environment variables
