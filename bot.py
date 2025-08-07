@@ -161,12 +161,73 @@ def webhook():
     loop.run_until_complete(telegram_app.process_update(update))
     return "ok", 200
 
-@app.route("/")
+# Handle webhook at root path as well (in case webhook URL is set incorrectly)
+@app.route("/", methods=["POST"])
+def webhook_root():
+    import asyncio
+    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
+    
+    # Run the async process_update in a new event loop
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    loop.run_until_complete(telegram_app.process_update(update))
+    return "ok", 200
+     
+@app.route("/", methods=["GET"])
 def index():
     return "Bot is live!", 200
+
+@app.route("/setwebhook")
+def set_webhook():
+    """Helper endpoint to set webhook URL"""
+    import asyncio
+    webhook_url = request.args.get('url')
+    if not webhook_url:
+        return "Please provide webhook URL: /setwebhook?url=YOUR_WEBHOOK_URL", 400
+    
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    try:
+        result = loop.run_until_complete(telegram_app.bot.set_webhook(url=webhook_url))
+        return f"Webhook set successfully: {result}", 200
+    except Exception as e:
+        return f"Error setting webhook: {e}", 500
+
+@app.route("/getwebhookinfo")
+def get_webhook_info():
+    """Helper endpoint to check current webhook status"""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
+    try:
+        webhook_info = loop.run_until_complete(telegram_app.bot.get_webhook_info())
+        return {
+            "url": webhook_info.url,
+            "has_custom_certificate": webhook_info.has_custom_certificate,
+            "pending_update_count": webhook_info.pending_update_count,
+            "last_error_date": webhook_info.last_error_date,
+            "last_error_message": webhook_info.last_error_message,
+            "max_connections": webhook_info.max_connections,
+            "allowed_updates": webhook_info.allowed_updates
+        }, 200
+    except Exception as e:
+        return f"Error getting webhook info: {e}", 500
 
 # === Run the app ===
 if __name__ == "__main__":
 
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+
 
