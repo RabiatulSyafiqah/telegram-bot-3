@@ -1,4 +1,4 @@
-python-telegram-bot==13.15
+python-telegram-bot>=20.0
 python-dotenv==1.1.1
 gspread==6.2.1
 flask==2.1.0  # Only if you use `keep_alive.py` with Flask
