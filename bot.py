@@ -26,6 +26,8 @@ load_dotenv()
 
 # Telegram bot setup
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required")
 bot = Bot(token=TOKEN)
 app = Flask(__name__)
 
