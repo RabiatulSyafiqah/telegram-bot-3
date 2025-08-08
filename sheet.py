@@ -28,7 +28,15 @@ scope = [
     *CALENDAR_SCOPES
 ]
 
-creds_dict = json.loads(os.getenv("GOOGLE_CREDS_JSON"))
+google_creds_json = os.getenv("GOOGLE_CREDS_JSON")
+if not google_creds_json:
+    raise ValueError("GOOGLE_CREDS_JSON environment variable is required")
+
+try:
+    creds_dict = json.loads(google_creds_json)
+except json. JSONcodeError as e:
+    raise ValueError(f"Invalid JSON in GOOGLE_CREDS_JSON: (e)")
+
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 
 try:
@@ -51,6 +59,7 @@ def is_valid_date(date_str):
         input_date = datetime(year, month, day).date()
         return input_date >= datetime.now().date()
     except:
+      except (ValueError, TypeError, AttributeError):
         return False
 
 def is_weekend(date_str):
@@ -59,6 +68,7 @@ def is_weekend(date_str):
         date_obj = datetime(year, month, day)
         return date_obj.weekday() >= 5
     except:
+      except (ValueError, TypeError, AttributeError):
         return False
 
 def get_available_slots(date_str):
@@ -69,6 +79,7 @@ def get_available_slots(date_str):
         weekday = datetime(year, month, day).strftime('%A')
         return OFFICE_HOURS.get(weekday, [])
     except:
+      except (ValueError, TypeError, AttributeError):
         return []
 
 def is_slot_available(date, time, officer):
@@ -116,4 +127,5 @@ def save_booking(user_id, name, phone, email, officer, purpose, date, time):
     if event:
         print(f"✅ Calendar event created: {event.get('htmlLink')}")
     else:
+
         print("[WARNING] Booking saved to sheet, but calendar event failed.")
