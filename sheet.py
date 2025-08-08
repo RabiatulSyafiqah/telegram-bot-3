@@ -29,25 +29,32 @@ scope = [
 ]
 
 google_creds_json = os.getenv("GOOGLE_CREDS_JSON")
+creds = None
 if not google_creds_json:
-    raise ValueError("GOOGLE_CREDS_JSON environment variable is required")
+    print("[WARNING] GOOGLE_CREDS_JSON environment variable is missing. Google integrations disabled.")
+else:
+    try:
+        creds_dict = json.loads(google_creds_json)
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    except json.JSONDecodeError as e:
+        print(f"[ERROR] Invalid JSON in GOOGLE_CREDS_JSON: {e}")
+        creds = None
 
 try:
-    creds_dict = json.loads(google_creds_json)
-except json. JSONcodeError as e:
-    raise ValueError(f"Invalid JSON in GOOGLE_CREDS_JSON: (e)")
-
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-
-try:
-    client = gspread.authorize(creds)
-    sheet = client.open(SHEET_NAME).sheet1
+    if creds:
+        client = gspread.authorize(creds)
+        sheet = client.open(SHEET_NAME).sheet1
+    else:
+        sheet = None
 except Exception as e:
     print(f"[ERROR] Failed to access Google Sheet: {e}")
     sheet = None
 
 try:
-    calendar_service = build('calendar', 'v3', credentials=creds)
+    if creds:
+        calendar_service = build('calendar', 'v3', credentials=creds)
+    else:
+        calendar_service = None
 except Exception as e:
     print(f"[ERROR] Calendar service initialization failed: {e}")
     calendar_service = None
@@ -58,8 +65,7 @@ def is_valid_date(date_str):
         day, month, year = map(int, date_str.split('/'))
         input_date = datetime(year, month, day).date()
         return input_date >= datetime.now().date()
-    except:
-      except (ValueError, TypeError, AttributeError):
+    except (ValueError, TypeError, AttributeError):
         return False
 
 def is_weekend(date_str):
@@ -67,8 +73,7 @@ def is_weekend(date_str):
         day, month, year = map(int, date_str.split('/'))
         date_obj = datetime(year, month, day)
         return date_obj.weekday() >= 5
-    except:
-      except (ValueError, TypeError, AttributeError):
+    except (ValueError, TypeError, AttributeError):
         return False
 
 def get_available_slots(date_str):
@@ -78,8 +83,7 @@ def get_available_slots(date_str):
         day, month, year = map(int, date_str.split('/'))
         weekday = datetime(year, month, day).strftime('%A')
         return OFFICE_HOURS.get(weekday, [])
-    except:
-      except (ValueError, TypeError, AttributeError):
+    except (ValueError, TypeError, AttributeError):
         return []
 
 def is_slot_available(date, time, officer):
@@ -127,5 +131,4 @@ def save_booking(user_id, name, phone, email, officer, purpose, date, time):
     if event:
         print(f"✅ Calendar event created: {event.get('htmlLink')}")
     else:
-
         print("[WARNING] Booking saved to sheet, but calendar event failed.")
