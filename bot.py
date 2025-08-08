@@ -28,7 +28,7 @@ TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 app = Flask(__name__)
 
 # Application setup for python-telegram-bot v20+
-telegram_app = Application.builder().token(TOKEN).build()
+# (Lazy-initialized in setup_application)
 
 # Conversation states
 CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_EMAIL, GET_PURPOSE, GET_DATE, GET_TIME = range(7)
@@ -67,7 +67,7 @@ async def choose_officer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["name"] = update.message.text.strip()
-    await update.message.reply_text("Masukkan alamat emel anda:")
+    await update.message.reply_text("Masukkan nombor telefon anda:")
     return GET_PHONE
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,6 +127,7 @@ async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_booking(update.message.from_user.id, data["name"], data["phone"], data["email"], officer, data["purpose"], date, chosen_time)
     await update.message.reply_text(f"✅ Tempahan berjaya!\nTarikh: {date}\nMasa: {chosen_time}\nPegawai: {officer}", reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Tempahan dibatalkan.")
@@ -155,35 +156,40 @@ async def setup_application():
         fallbacks=[CommandHandler("cancel", cancel)]
     )
 
-                application.add_handler(CommandHandler("start",start))
-                application.add_handler(conv_handler)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(conv_handler)
 
-                return application
+    return application
 
-# === Webhook route ===
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
+def ensure_application_initialized():
+    global application
+    if application is None:
+        asyncio.run(setup_application())
 
-    # Process the update synchronously using asynchio
-     try:
-          loop = asyncio.new_event_loop()
-          asyncio.set_event_loop(loop)
-          loop.run_until_complete(application.process_update(update))
-          loop.close()
-except Exception as e:
-          print(f"Error processing update: {e}")
-          return "error", 500
-     
-    return "ok", 200
-     
-@app.route("/")
+# === Webhook & health routes ===
+@app.route("/", methods=["GET", "POST"])
 def index():
+    if request.method == "POST":
+        ensure_application_initialized()
+        update = Update.de_json(request.get_json(force=True), application.bot)
+        try:
+            asyncio.run(application.process_update(update))
+        except Exception as e:
+            logging.exception(f"Error processing update: {e}")
+            return "error", 500
+        return "ok", 200
     return "Bot is live!", 200
 
-@app.route("/, methods=["POST"})
-def webhook_root():
-    return webhook()
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    ensure_application_initialized()
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    try:
+        asyncio.run(application.process_update(update))
+    except Exception as e:
+        logging.exception(f"Error processing update: {e}")
+        return "error", 500
+    return "ok", 200
 
 # === Run the app ===
 if __name__ == "__main__":
