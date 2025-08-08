@@ -1,8 +1,10 @@
 # bot.py
+import asyncio
 from flask import Flask, request
 from dotenv import load_dotenv
 import os
 import logging
+import threading
 
 from telegram import Bot, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
@@ -30,6 +32,9 @@ telegram_app = Application.builder().token(TOKEN).build()
 
 # Conversation states
 CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_EMAIL, GET_PURPOSE, GET_DATE, GET_TIME = range(7)
+
+# Global application instance
+application = None
 
 # === Handlers ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,107 +132,64 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Tempahan dibatalkan.")
     return ConversationHandler.END
 
-# === Register handlers ===
-conv_handler = ConversationHandler(
-    entry_points=[CommandHandler("book", book)],
-    states={
-        CHOOSING_OFFICER: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_officer)],
-        GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-        GET_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
-        GET_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_email)],
-        GET_PURPOSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_purpose)],
-        GET_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)],
-        GET_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_time)],
-    },
-    fallbacks=[CommandHandler("cancel", cancel)]
-)
+# === Setup Application ===
+async def setup_application():
+    global application
+    application = Application.builder().token(TOKEN).build()
+    
+    # Initialize the application
+    await application.initialize()
+    
+    # === Register handlers ===
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("book", book)],
+        states={
+            CHOOSING_OFFICER: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_officer)],
+            GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            GET_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
+            GET_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_email)],
+            GET_PURPOSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_purpose)],
+            GET_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)],
+            GET_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_time)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)]
+    )
 
-telegram_app.add_handler(CommandHandler("start", start))
-telegram_app.add_handler(conv_handler)
+                application.add_handler(CommandHandler("start",start))
+                application.add_handler(conv_handler)
+
+                return application
 
 # === Webhook route ===
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    import asyncio
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    
-    # Run the async process_update in a new event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    loop.run_until_complete(telegram_app.process_update(update))
-    return "ok", 200
+    update = Update.de_json(request.get_json(force=True), application.bot)
 
-# Handle webhook at root path as well (in case webhook URL is set incorrectly)
-@app.route("/", methods=["POST"])
-def webhook_root():
-    import asyncio
-    update = Update.de_json(request.get_json(force=True), telegram_app.bot)
-    
-    # Run the async process_update in a new event loop
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    loop.run_until_complete(telegram_app.process_update(update))
+    # Process the update synchronously using asynchio
+     try:
+          loop = asyncio.new_event_loop()
+          asyncio.set_event_loop(loop)
+          loop.run_until_complete(application.process_update(update))
+          loop.close()
+except Exception as e:
+          print(f"Error processing update: {e}")
+          return "error", 500
+     
     return "ok", 200
      
-@app.route("/", methods=["GET"])
+@app.route("/")
 def index():
     return "Bot is live!", 200
 
-@app.route("/setwebhook")
-def set_webhook():
-    """Helper endpoint to set webhook URL"""
-    import asyncio
-    webhook_url = request.args.get('url')
-    if not webhook_url:
-        return "Please provide webhook URL: /setwebhook?url=YOUR_WEBHOOK_URL", 400
-    
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    try:
-        result = loop.run_until_complete(telegram_app.bot.set_webhook(url=webhook_url))
-        return f"Webhook set successfully: {result}", 200
-    except Exception as e:
-        return f"Error setting webhook: {e}", 500
-
-@app.route("/getwebhookinfo")
-def get_webhook_info():
-    """Helper endpoint to check current webhook status"""
-    import asyncio
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    
-    try:
-        webhook_info = loop.run_until_complete(telegram_app.bot.get_webhook_info())
-        return {
-            "url": webhook_info.url,
-            "has_custom_certificate": webhook_info.has_custom_certificate,
-            "pending_update_count": webhook_info.pending_update_count,
-            "last_error_date": webhook_info.last_error_date,
-            "last_error_message": webhook_info.last_error_message,
-            "max_connections": webhook_info.max_connections,
-            "allowed_updates": webhook_info.allowed_updates
-        }, 200
-    except Exception as e:
-        return f"Error getting webhook info: {e}", 500
+@app.route("/, methods=["POST"})
+def webhook_root():
+    return webhook()
 
 # === Run the app ===
 if __name__ == "__main__":
+     # Initialize the application
+     asyncio.run(setup_application())
+     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 
