@@ -137,9 +137,12 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 # === Setup Application ===
-def setup_application():
+async def setup_application():
     global application
     application = Application.builder().token(TOKEN).build()
+    
+    # Initialize the application
+    await application.initialize()
     
     # === Register handlers ===
     conv_handler = ConversationHandler(
@@ -166,16 +169,29 @@ def setup_application():
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     
-    # Run the update processing in an asyncio event loop
-    asyncio.run(application.process_update(update))
+    # Process the update synchronously using asyncio
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(application.process_update(update))
+        loop.close()
+    except Exception as e:
+        print(f"Error processing update: {e}")
+        return "error", 500
+    
     return "ok", 200
 
 @app.route("/")
 def index():
     return "Bot is live!", 200
 
+@app.route("/", methods=["POST"])
+def webhook_root():
+    # Redirect POST requests to root to the proper webhook endpoint
+    return webhook()
+
 # === Run the app ===
 if __name__ == "__main__":
     # Initialize the application
-    setup_application()
+    asyncio.run(setup_application())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
