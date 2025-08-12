@@ -162,6 +162,12 @@ async def setup_application():
     return application
 
 # === Webhook route ===
+@app.before_first_request
+def ensure_application_initialized():
+    global application
+    if application is None:
+        asyncio.run(setup_application())
+
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
@@ -182,8 +188,24 @@ def webhook():
      
     return "ok", 200
      
-@app.route("/")
+@app.route("/", methods=["GET", "HEAD", "POST"])
 def index():
+     if request.method == "POST":
+        try:
+            update = Update.de_json(request.get_json(force=True), application.bot)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(application.process_update(update))
+        except Exception as e:
+            print(f"Error processing update at root: {e}")
+            return "error", 500
+        finally:
+            try:
+                loop.close()
+            except Exception:
+                pass
+        return "ok", 200
+          
     return "Bot is live!", 200
 
 # === Run the app ===
@@ -191,3 +213,4 @@ if __name__ == "__main__":
      # Initialize the application
      asyncio.run(setup_application())
      app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+     
