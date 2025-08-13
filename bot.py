@@ -4,9 +4,6 @@ from flask import Flask, request
 from dotenv import load_dotenv
 import os
 import logging
-import threading
-from concurrent.futures import ThreadPoolExecutor
-import queue
 
 from telegram import Bot, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
@@ -39,9 +36,6 @@ CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_EMAIL, GET_PURPOSE, GET_DATE, GET_TIM
 
 # Global application instance
 application = None
-
-# Thread pool for handling async operations
-executor = ThreadPoolExecutor(max_workers=4)
 
 # === Handlers ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -140,13 +134,10 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Tempahan dibatalkan.")
     return ConversationHandler.END
 
-# === Setup Application ===
-async def setup_application():
-    global application
-    application = Application.builder().token(TOKEN).build()
-    
-    # Initialize the application
-    await application.initialize()
+# === Create Application Function ===
+def create_application():
+    """Create and configure the Telegram application"""
+    app = Application.builder().token(TOKEN).build()
     
     # === Register handlers ===
     conv_handler = ConversationHandler(
@@ -163,26 +154,47 @@ async def setup_application():
         fallbacks=[CommandHandler("cancel", cancel)]
     )
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(conv_handler)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(conv_handler)
     
-    return application
+    return app
 
-# Function to process updates in a separate thread
-def process_update_sync(update):
-    """Process update in a dedicated asyncio event loop"""
+# === Process Update Function ===
+async def process_telegram_update(update_data):
+    """Process a single telegram update with a fresh application instance"""
+    # Create a fresh application instance for this update
+    app = create_application()
+    
     try:
-        asyncio.run(application.process_update(update))
+        # Initialize the application
+        await app.initialize()
+        
+        # Create the update object
+        update = Update.de_json(update_data, app.bot)
+        
+        # Process the update
+        await app.process_update(update)
+        
     except Exception as e:
         print(f"Error processing update: {e}")
+    finally:
+        # Clean up the application
+        try:
+            await app.shutdown()
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
 
 # === Webhook routes ===
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
+    update_data = request.get_json(force=True)
     
-    # Process the update in a separate thread with its own event loop
-    executor.submit(process_update_sync, update)
+    # Process the update with a clean asyncio.run() call
+    try:
+        asyncio.run(process_telegram_update(update_data))
+    except Exception as e:
+        print(f"Error in webhook: {e}")
+        return "error", 500
     
     return "ok", 200
 
@@ -197,6 +209,4 @@ def webhook_root():
 
 # === Run the app ===
 if __name__ == "__main__":
-    # Initialize the application
-    asyncio.run(setup_application())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
