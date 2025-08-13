@@ -134,10 +134,13 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Tempahan dibatalkan.")
     return ConversationHandler.END
 
-# === Create Application Function ===
-def create_application():
-    """Create and configure the Telegram application"""
-    app = Application.builder().token(TOKEN).build()
+# === Setup Application ===
+async def setup_application():
+    global application
+    application = Application.builder().token(TOKEN).build()
+    
+    # Initialize the application
+    await application.initialize()
     
     # === Register handlers ===
     conv_handler = ConversationHandler(
@@ -154,46 +157,45 @@ def create_application():
         fallbacks=[CommandHandler("cancel", cancel)]
     )
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(conv_handler)
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(conv_handler)
     
-    return app
+    return application
 
-# === Process Update Function ===
-async def process_telegram_update(update_data):
-    """Process a single telegram update with a fresh application instance"""
-    # Create a fresh application instance for this update
-    app = create_application()
+# === Global event loop for the application ===
+bot_loop = None
+bot_thread = None
+
+def run_bot_loop():
+    """Run the bot's event loop in a dedicated thread"""
+    global bot_loop
+    bot_loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(bot_loop)
     
-    try:
-        # Initialize the application
-        await app.initialize()
-        
-        # Create the update object
-        update = Update.de_json(update_data, app.bot)
-        
-        # Process the update
-        await app.process_update(update)
-        
-    except Exception as e:
-        print(f"Error processing update: {e}")
-    finally:
-        # Clean up the application
-        try:
-            await app.shutdown()
-        except Exception as e:
-            print(f"Error during shutdown: {e}")
+    # Initialize the application in this thread
+    asyncio.run_coroutine_threadsafe(setup_application(), bot_loop)
+    
+    # Run the event loop forever
+    bot_loop.run_forever()
+
+import threading
 
 # === Webhook routes ===
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update_data = request.get_json(force=True)
+    update = Update.de_json(request.get_json(force=True), application.bot)
     
-    # Process the update with a clean asyncio.run() call
-    try:
-        asyncio.run(process_telegram_update(update_data))
-    except Exception as e:
-        print(f"Error in webhook: {e}")
+    # Schedule the update processing in the bot's event loop
+    if bot_loop and not bot_loop.is_closed():
+        future = asyncio.run_coroutine_threadsafe(application.process_update(update), bot_loop)
+        try:
+            # Wait for completion with a timeout
+            future.result(timeout=30)
+        except Exception as e:
+            print(f"Error processing update: {e}")
+            return "error", 500
+    else:
+        print("Bot loop not available")
         return "error", 500
     
     return "ok", 200
@@ -209,4 +211,13 @@ def webhook_root():
 
 # === Run the app ===
 if __name__ == "__main__":
+    # Start the bot in a separate thread with its own event loop
+    import threading
+    bot_thread = threading.Thread(target=run_bot_loop, daemon=True)
+    bot_thread.start()
+    
+    # Give the bot thread time to initialize
+    import time
+    time.sleep(2)
+    
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
