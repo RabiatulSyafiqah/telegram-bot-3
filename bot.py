@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 import os
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
+import queue
 
 from telegram import Bot, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
@@ -37,6 +39,9 @@ CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_EMAIL, GET_PURPOSE, GET_DATE, GET_TIM
 
 # Global application instance
 application = None
+
+# Thread pool for handling async operations
+executor = ThreadPoolExecutor(max_workers=4)
 
 # === Handlers ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -163,17 +168,21 @@ async def setup_application():
     
     return application
 
+# Function to process updates in a separate thread
+def process_update_sync(update):
+    """Process update in a dedicated asyncio event loop"""
+    try:
+        asyncio.run(application.process_update(update))
+    except Exception as e:
+        print(f"Error processing update: {e}")
+
 # === Webhook routes ===
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     
-    # Process the update using asyncio.run which handles the event loop properly
-    try:
-        asyncio.run(application.process_update(update))
-    except Exception as e:
-        print(f"Error processing update: {e}")
-        return "error", 500
+    # Process the update in a separate thread with its own event loop
+    executor.submit(process_update_sync, update)
     
     return "ok", 200
 
@@ -191,6 +200,3 @@ if __name__ == "__main__":
     # Initialize the application
     asyncio.run(setup_application())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-
-
-
