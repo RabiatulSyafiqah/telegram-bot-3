@@ -168,12 +168,9 @@ async def setup_application():
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
     
-    # Process the update synchronously using asyncio
+    # Process the update using asyncio.run which handles the event loop properly
     try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(application.process_update(update))
-        loop.close()
+        asyncio.run(application.process_update(update))
     except Exception as e:
         print(f"Error processing update: {e}")
         return "error", 500
@@ -194,5 +191,6 @@ if __name__ == "__main__":
     # Initialize the application
     asyncio.run(setup_application())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
 
 
