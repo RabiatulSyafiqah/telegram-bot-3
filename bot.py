@@ -8,16 +8,18 @@ import threading
 
 from telegram import Bot, Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
-     Application, CommandHandler, MessageHandler, filters,
-    ConversationHandler, CallbackContext, ContextTypes
+    Application, CommandHandler, MessageHandler, filters,
+    ConversationHandler, ContextTypes
 )
 
 from sheet import (
     is_slot_available,
     save_booking,
+    get_alternative_times,
     is_valid_date,
     is_weekend,
-    get_available_slots
+    get_available_slots,
+    sheet
 )
 
 # Load environment variables
@@ -25,10 +27,11 @@ load_dotenv()
 
 # Telegram bot setup
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-app = Flask(__name__)
+if not TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required")
 
-# Application setup for python-telegram-bot v20+
-telegram_app = Application.builder().token(TOKEN).build()
+# Flask app setup
+app = Flask(__name__)
 
 # Conversation states
 CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_EMAIL, GET_PURPOSE, GET_DATE, GET_TIME = range(7)
@@ -67,7 +70,7 @@ async def choose_officer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["name"] = update.message.text.strip()
-    await update.message.reply_text("Masukkan nombor telefon anda:")
+    await update.message.reply_text("Masukkan nombor telefon anda (cth: 0134567890):")
     return GET_PHONE
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -156,61 +159,39 @@ async def setup_application():
         fallbacks=[CommandHandler("cancel", cancel)]
     )
 
-    application.add_handler(CommandHandler("start",start))
+    application.add_handler(CommandHandler("start", start))
     application.add_handler(conv_handler)
-
+    
     return application
 
-# === Webhook route ===
-@app.before_first_request
-def ensure_application_initialized():
-    global application
-    if application is None:
-        asyncio.run(setup_application())
-
+# === Webhook routes ===
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
     update = Update.de_json(request.get_json(force=True), application.bot)
-
+    
     # Process the update synchronously using asyncio
     try:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         loop.run_until_complete(application.process_update(update))
+        loop.close()
     except Exception as e:
         print(f"Error processing update: {e}")
         return "error", 500
-    finally:
-        try:
-            loop.close()
-        except Exception:
-            pass
-     
+    
     return "ok", 200
-     
-@app.route("/", methods=["GET", "HEAD", "POST"])
+
+@app.route("/")
 def index():
-     if request.method == "POST":
-        try:
-            update = Update.de_json(request.get_json(force=True), application.bot)
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(application.process_update(update))
-        except Exception as e:
-            print(f"Error processing update at root: {e}")
-            return "error", 500
-        finally:
-            try:
-                loop.close()
-            except Exception:
-                pass
-        return "ok", 200
-          
     return "Bot is live!", 200
+
+@app.route("/", methods=["POST"])
+def webhook_root():
+    # Redirect POST requests to root to the proper webhook endpoint
+    return webhook()
 
 # === Run the app ===
 if __name__ == "__main__":
-     # Initialize the application
-     asyncio.run(setup_application())
-     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-     
+    # Initialize the application
+    asyncio.run(setup_application())
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
