@@ -15,7 +15,6 @@ from telegram.ext import (
 from sheet import (
     is_slot_available,
     save_booking,
-    get_alternative_times,
     is_valid_date,
     is_weekend,
     get_available_slots,
@@ -195,3 +194,4 @@ if __name__ == "__main__":
     # Initialize the application
     asyncio.run(setup_application())
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
