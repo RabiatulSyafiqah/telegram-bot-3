@@ -33,7 +33,7 @@ if not TOKEN:
 app = Flask(__name__)
 
 # Conversation states
-CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_EMAIL, GET_PURPOSE, GET_DATE, GET_TIME = range(7)
+CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_PURPOSE, GET_DATE, GET_TIME = range(6)
 
 # Global application instance
 application = None
@@ -77,13 +77,10 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["phone"] = update.message.text.strip()
-    await update.message.reply_text("Masukkan alamat emel anda:")
-    return GET_EMAIL
-
-async def get_email(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["email"] = update.message.text.strip()
     await update.message.reply_text("Nyatakan tujuan janji temu:")
     return GET_PURPOSE
+
+
 
 async def get_purpose(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["purpose"] = update.message.text.strip()
@@ -133,7 +130,7 @@ async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Slot ini tidak tersedia (bertembung dengan jadual). Sila pilih masa lain.", reply_markup=ReplyKeyboardMarkup([[slot] for slot in available_slots], one_time_keyboard=True))
         return GET_TIME
 
-    save_booking(update.message.from_user.id, data["name"], data["phone"], data["email"], officer, data["purpose"], date, chosen_time)
+    save_booking(update.message.from_user.id, data["name"], data["phone"], "", officer, data["purpose"], date, chosen_time)
     await update.message.reply_text(f"✅ Tempahan berjaya!\nTarikh: {date}\nMasa: {chosen_time}\nPegawai: {officer}", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
@@ -156,7 +153,7 @@ async def setup_application():
             CHOOSING_OFFICER: [MessageHandler(filters.TEXT & ~filters.COMMAND, choose_officer)],
             GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
             GET_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_phone)],
-            GET_EMAIL: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_email)],
+
             GET_PURPOSE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_purpose)],
             GET_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_date)],
             GET_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_time)],
