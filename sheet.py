@@ -18,7 +18,8 @@ OFFICE_HOURS = {
 }
 OFFICER_CALENDARS = {
     "DO": "do@keningau.gov.my",
-    "ADO": "rabiatulsyafiqahhh@gmail.com"
+    "ADO_PENTADBIRAN": "rabiatulsyafiqahhh@gmail.com",
+    "ADO_PEMBANGUNAN": "syafiqahzamlee@gmail.com"
 }
 
 # === GOOGLE SHEETS & CALENDAR AUTH ===
@@ -159,4 +160,5 @@ def save_booking(user_id, name, phone, email, officer, purpose, date, time):
         print(f"✅ Calendar event created: {event.get('htmlLink')}")
     else:
         print("[WARNING] Booking saved to sheet, but calendar event failed.")
+
 
