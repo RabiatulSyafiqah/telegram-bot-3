@@ -17,7 +17,8 @@ from sheet import (
     is_valid_date,
     is_weekend,
     get_available_slots,
-    sheet
+    sheet,
+    get_available_slots_for_officer
 )
 
 # Load environment variables
@@ -97,7 +98,8 @@ async def get_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⛔ Tempahan tidak boleh dibuat pada hujung minggu. Sila pilih tarikh bekerja.")
         return GET_DATE
 
-    available_slots = get_available_slots(date)
+    officer = context.user_data.get("officer")
+    available_slots = get_available_slots_for_officer(date, officer) if officer else get_available_slots(date)
     if not available_slots:
         await update.message.reply_text("⛔ Tiada slot tersedia pada tarikh ini. Sila cuba tarikh lain:")
         return GET_DATE
@@ -123,7 +125,9 @@ async def get_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return GET_TIME
 
     if not is_slot_available(date, chosen_time, officer):
-        await update.message.reply_text("⛔ Slot ini telah ditempah. Sila pilih masa lain.", reply_markup=ReplyKeyboardMarkup([[slot] for slot in available_slots if is_slot_available(date, slot, officer)], one_time_keyboard=True))
+         # Recompute available slots to reflect latest calendar updates
+        available_slots = get_available_slots_for_officer(date, officer)
+        await update.message.reply_text("⛔ Slot ini tidak tersedia (bertembung dengan jadual). Sila pilih masa lain.", reply_markup=ReplyKeyboardMarkup([[slot] for slot in available_slots], one_time_keyboard=True))
         return GET_TIME
 
     save_booking(update.message.from_user.id, data["name"], data["phone"], data["email"], officer, data["purpose"], date, chosen_time)
@@ -221,3 +225,4 @@ if __name__ == "__main__":
     time.sleep(2)
     
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
