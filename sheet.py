@@ -79,6 +79,20 @@ def get_available_slots(date_str):
     except (ValueError, TypeError, AttributeError):
         return []
 
+# filter available slots by officer conflicts (sheet + calendar)
+def get_available_slots_for_officer(date_str, officer):
+    base_slots = get_available_slots(date_str)
+    if not base_slots:
+        return []
+    filtered = []
+    for slot in base_slots:
+        try:
+            if is_slot_available(date_str, slot, officer):
+                filtered.append(slot)
+        except Exception as e:
+            print(f"[WARNING] Failed to validate slot {slot} on {date_str} for {officer}: {e}")
+    return filtered
+
 def is_slot_available(date, time, officer):
     if not sheet:
         return False
@@ -88,6 +102,26 @@ def is_slot_available(date, time, officer):
     for row in records:
         if row['Date'] == date and row['Time'] == time and row['Officer'] == officer:
             return False
+    # Check Google Calendar for conflicts
+    try:
+        if calendar_service:
+            day, month, year = map(int, date.split('/'))
+            date_obj = datetime(year, month, day)
+            start_time = datetime.strptime(time, '%H:%M')
+            end_time = start_time + timedelta(minutes=30)
+            start_datetime = datetime.combine(date_obj, start_time.time()).isoformat() + '+08:00'
+            end_datetime = datetime.combine(date_obj, end_time.time()).isoformat() + '+08:00'
+            events_resp = calendar_service.events().list(
+                calendarId=OFFICER_CALENDARS[officer],
+                timeMin=start_datetime,
+                timeMax=end_datetime,
+                singleEvents=True,
+                maxResults=1
+            ).execute()
+            if len(events_resp.get('items', [])) > 0:
+                return False
+    except Exception as e:
+        print(f"[ERROR] Calendar conflict check failed: {e}")
     return True
 
 def create_calendar_event(officer, date_str, time_str, user_name, purpose, phone):
@@ -125,3 +159,4 @@ def save_booking(user_id, name, phone, email, officer, purpose, date, time):
         print(f"✅ Calendar event created: {event.get('htmlLink')}")
     else:
         print("[WARNING] Booking saved to sheet, but calendar event failed.")
+
