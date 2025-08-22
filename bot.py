@@ -33,7 +33,7 @@ if not TOKEN:
 app = Flask(__name__)
 
 # Conversation states
-CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_PURPOSE, GET_DATE, GET_TIME = range(7)
+CHOOSING_OFFICER, GET_NAME, GET_PHONE, GET_PURPOSE, GET_DATE, GET_TIME = range(6)
 
 # Global application instance
 application = None
@@ -222,6 +222,7 @@ if __name__ == "__main__":
     time.sleep(2)
     
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
 
 
 
