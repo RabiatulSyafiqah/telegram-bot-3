@@ -18,7 +18,8 @@ OFFICE_HOURS = {
 }
 OFFICER_CALENDARS = {
     "DO": "do@keningau.gov.my",
-    "ADO": "rabiatulsyafiqahhh@gmail.com"
+    "ADO": "rabiatulsyafiqahhh@gmail.com",
+    "ADO_PEMBANGUNAN": None  # TODO: set to ADO (Pembangunan) calendar ID/email
 }
 
 # === GOOGLE SHEETS & CALENDAR AUTH ===
@@ -111,15 +112,17 @@ def is_slot_available(date, time, officer):
             end_time = start_time + timedelta(minutes=30)
             start_datetime = datetime.combine(date_obj, start_time.time()).isoformat() + '+08:00'
             end_datetime = datetime.combine(date_obj, end_time.time()).isoformat() + '+08:00'
-            events_resp = calendar_service.events().list(
-                calendarId=OFFICER_CALENDARS[officer],
-                timeMin=start_datetime,
-                timeMax=end_datetime,
-                singleEvents=True,
-                maxResults=1
-            ).execute()
-            if len(events_resp.get('items', [])) > 0:
-                return False
+            cal_id = OFFICER_CALENDARS.get(officer)
+            if cal_id:
+                events_resp = calendar_service.events().list(
+                    calendarId=cal_id,
+                    timeMin=start_datetime,
+                    timeMax=end_datetime,
+                    singleEvents=True,
+                    maxResults=1
+                ).execute()
+                if len(events_resp.get('items', [])) > 0:
+                    return False
     except Exception as e:
         print(f"[ERROR] Calendar conflict check failed: {e}")
     return True
@@ -144,7 +147,10 @@ def create_calendar_event(officer, date_str, time_str, user_name, purpose, phone
             'reminders': {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 30}]}
         }
 
-        return calendar_service.events().insert(calendarId=OFFICER_CALENDARS[officer], body=event).execute()
+        cal_id = OFFICER_CALENDARS.get(officer)
+        if not cal_id:
+            return None
+        return calendar_service.events().insert(calendarId=cal_id, body=event).execute()
     except Exception as e:
         print(f"[ERROR] Calendar error: {e}")
         return None

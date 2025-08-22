@@ -49,7 +49,8 @@ async def book(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Sila pilih pegawai yang ingin anda temui:\n"
         "1. Pegawai Daerah (DO)\n"
-        "2. Penolong Pegawai Daerah (ADO)"
+        "2. Penolong Pegawai Daerah (ADO)\n"
+        "3. Penolong Pegawai Daerah (Pembangunan)"
     )
     return CHOOSING_OFFICER
 
@@ -59,8 +60,10 @@ async def choose_officer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         officer = "DO"
     elif choice == "2":
         officer = "ADO"
+    elif choice == "3":
+        officer = "ADO_PEMBANGUNAN"
     else:
-        await update.message.reply_text("Sila pilih 1 atau 2.")
+        await update.message.reply_text("Sila pilih 1, 2 atau 3.")
         return CHOOSING_OFFICER
 
     context.user_data["officer"] = officer
